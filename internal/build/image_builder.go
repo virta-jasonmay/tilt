@@ -383,6 +383,10 @@ func readDockerOutput(ctx context.Context, reader io.Reader, writer io.Writer) (
 			return dockerOutput{}, errors.New(cleanupDockerBuildError(message.Error.Message))
 		}
 
+		if message.ID != "" && message.Progress != nil {
+			_, _ = fmt.Fprintf(writer, "%s: %s %s TILTID:%s\n", message.ID, message.Status, message.Progress.String(), message.ID)
+		}
+
 		if messageIsFromBuildkit(message) {
 			err := toBuildkitStatus(message.Aux, b)
 			if err != nil {

@@ -210,6 +210,7 @@ class LogStore {
 
   logHelper(spansToLog: { [key: string]: LogSpan }): LogLine[] {
     let result: LogLine[] = []
+    let alreadyWritten = {} as { [key: string]: boolean }
 
     // We want to print the log line-by-line, but we don't actually store the logs
     // line-by-line. We store them as segments.
@@ -258,17 +259,17 @@ class LogStore {
         continue
       }
 
+      if (alreadyWritten[i]) {
+        continue
+      }
+
       let spanId = segment.spanId
       let span = spansToLog[spanId]
       if (!span) {
         continue
       }
 
-      let line = this.lineCache[segment.globalLineIndex]
-      if (!line) {
-        line = this.createLogLineHelper(i, segment, span)
-        this.lineCache[segment.globalLineIndex] = line
-      }
+      let line = this.createLogLineHelper(i, segment, span, alreadyWritten)
       result.push(line)
     }
 
@@ -278,13 +279,51 @@ class LogStore {
   private createLogLineHelper(
     i: number,
     segment: LogSegment,
-    span: LogSpan
+    span: LogSpan,
+    alreadyWritten: { [key: string]: boolean }
   ): LogLine {
     let spanId = segment.spanId
     let currentLine = {
       manifestName: span.manifestName,
       text: segment.text,
       level: segment.level,
+    }
+
+    let text = segment.text
+    let hasTiltID = text.indexOf("TILTID:") != -1
+    if (hasTiltID) {
+      let tiltID = text.substring(
+        text.indexOf("TILTID:") + "TILTID:".length,
+        text.length - 1
+      )
+
+      for (
+        let currentIndex = i + 1;
+        currentIndex <= span.lastSegmentIndex;
+        currentIndex++
+      ) {
+        let currentSeg = this.segments[currentIndex]
+        if (currentSeg.spanId != spanId) {
+          continue
+        }
+
+        let cText = currentSeg.text
+        let cHasTiltID = cText.indexOf("TILTID:") != -1
+        if (!cHasTiltID) {
+          break
+        }
+
+        let cTiltID = cText.substring(
+          cText.indexOf("TILTID:") + "TILTID:".length,
+          cText.length - 1
+        )
+        if (tiltID != cTiltID) {
+          continue
+        }
+
+        currentLine.text = cText
+        alreadyWritten[currentIndex] = true
+      }
     }
 
     // If this segment is complete, we can return right now.
