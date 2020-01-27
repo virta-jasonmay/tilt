@@ -155,6 +155,7 @@ func (ibd *ImageBuildAndDeployer) BuildAndDeploy(ctx context.Context, st store.R
 			return nil, err
 		}
 
+		// 👉🏻 ibd.push takes UpdateSettings as well
 		ref, err = ibd.push(ctx, ref, ps, iTarget, kTarget)
 		if err != nil {
 			return nil, err
@@ -190,6 +191,9 @@ func (ibd *ImageBuildAndDeployer) push(ctx context.Context, ref reference.NamedT
 	}
 
 	var err error
+	// 👉🏻 if ibd.shouldKindLoad()...
+	// where `shouldKindLoad` checks EnvKIND, UpdateSettings.KindLoad, buildref == deployref
+	// maybe rename to KindLoader
 	if ibd.env == k8s.EnvKIND5 || ibd.env == k8s.EnvKIND6 {
 		ps.Printf(ctx, "Pushing to KIND")
 		err := ibd.kp.PushToKIND(ps.AttachLogger(ctx), ref)

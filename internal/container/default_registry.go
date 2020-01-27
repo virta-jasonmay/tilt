@@ -11,6 +11,7 @@ import (
 // ex)
 // localhost:32000
 // gcr.io/windmill-public-containers
+// 👉🏻 struct containing push reg and pull reg
 type Registry string
 
 var escapeRegex = regexp.MustCompile(`[/:@]`)
@@ -23,6 +24,7 @@ func escapeName(s string) string {
 // The name might be ugly, favoring uniqueness and simplicity and assuming that the prettiness of ephemeral dev image
 // names is not that important.
 func ReplaceRegistry(defaultRegistry Registry, rs RefSelector) (reference.Named, error) {
+	// 👉🏻 should return buildRef, deployRef
 	if defaultRegistry == "" {
 		return rs.AsNamedOnly(), nil
 	}

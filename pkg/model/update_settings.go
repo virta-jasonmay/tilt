@@ -4,6 +4,7 @@ var DefaultMaxParallelUpdates = 3
 
 type UpdateSettings struct {
 	MaxParallelUpdates int // max number of updates to run concurrently
+	// 👉🏻 KindLoad: on/off/auto
 }
 
 func (us UpdateSettings) MaxParallelUpdatesMinOne() int {

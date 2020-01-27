@@ -25,16 +25,21 @@ var cacheObsoleteWarning = "docker_build(cache=...) is obsolete, and currently a
 	"You should switch to live_update to optimize your builds."
 
 type dockerImage struct {
-	workDir          string
+	// ref as specified in Tiltfile; used to match a DockerBuild with corresponding k8s YAML. May contain tags, etc.
+	// (Also used as user-facing name for this image.)
 	configurationRef container.RefSelector
-	deploymentRef    reference.Named
-	matchInEnvVars   bool
-	sshSpecs         []string
-	ignores          []string
-	onlys            []string
-	entrypoint       model.Cmd // optional: if specified, we override the image entrypoint/k8s command with this
-	targetStage      string    // optional: if specified, we build a particular target in the dockerfile
-	network          string
+	// stripped of tags, default_registry (if any) prepended, etc. This is the ref we build the image with (+ tilt tag),
+	// and that we inject into k8s YAML before deploying.
+	deploymentRef reference.Named // 👉🏻 buildref + deployref
+
+	workDir        string
+	matchInEnvVars bool
+	sshSpecs       []string
+	ignores        []string
+	onlys          []string
+	entrypoint     model.Cmd // optional: if specified, we override the image entrypoint/k8s command with this
+	targetStage    string    // optional: if specified, we build a particular target in the dockerfile
+	network        string
 
 	dbDockerfilePath string
 	dbDockerfile     dockerfile.Dockerfile
@@ -454,6 +459,7 @@ func (s *tiltfileState) defaultRegistry(thread *starlark.Thread, fn *starlark.Bu
 	}
 
 	var dr string
+	// 👉🏻 two args: push prefix (positional), pull prefix (kwarg, optional). if pull prefix not given, use push prefix for both
 	if err := s.unpackArgs(fn.Name(), args, kwargs, "name", &dr); err != nil {
 		return nil, err
 	}

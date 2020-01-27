@@ -11,10 +11,15 @@ import (
 )
 
 type ImageTarget struct {
+	// ref as specified in Tiltfile; used to match a DockerBuild with corresponding k8s YAML. May contain tags, etc.
+	// (Also used as user-facing name for this image.)
 	ConfigurationRef container.RefSelector
-	DeploymentRef    reference.Named
-	BuildDetails     BuildDetails
-	MatchInEnvVars   bool
+	// stripped of tags, default_registry (if any) prepended, etc. This is the ref we build the image with (+ tilt tag),
+	// and that we inject into k8s YAML before deploying.
+	DeploymentRef reference.Named // 👉🏻 this wants to be a struct with buildref and deployref
+
+	BuildDetails   BuildDetails
+	MatchInEnvVars bool
 
 	// User-supplied command to run when the container runs
 	// (i.e. overrides k8s yaml "command", container ENTRYPOINT, etc.)

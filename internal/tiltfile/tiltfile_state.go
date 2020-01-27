@@ -61,6 +61,7 @@ type tiltfileState struct {
 	localResources     []localResource
 
 	// ensure that any pushed images are pushed instead to this registry, rewriting names if needed
+	// 👉🏻 use new struct with push + pull registry
 	defaultRegistryHost container.Registry
 
 	// JSON paths to images in k8s YAML (other than Container specs)
