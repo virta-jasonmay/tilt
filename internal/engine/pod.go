@@ -28,16 +28,19 @@ func handlePodChangeAction(ctx context.Context, state *store.EngineState, action
 	ms := mt.State
 	manifest := mt.Manifest
 	podInfo, isNew := maybeTrackPod(ms, action)
-	podID := k8s.PodIDFromPod(pod)
-	if podInfo.PodID != podID {
-		// This is an event from an old pod.
+	if podInfo == nil {
+		// This is an event from an old pod that has never been tracked.
 		return
 	}
 
 	// Update the status
+	podInfo.StartedAt = pod.CreationTimestamp.Time
+	podInfo.Status = k8swatch.PodStatusToString(*pod)
+	podInfo.Namespace = k8s.NamespaceFromPod(pod)
+	podInfo.HasSynclet = sidecar.PodSpecContainsSynclet(pod.Spec)
+	podInfo.SpanID = runtimelog.SpanIDForPod(podInfo.PodID)
 	podInfo.Deleting = pod.DeletionTimestamp != nil && !pod.DeletionTimestamp.IsZero()
 	podInfo.Phase = pod.Status.Phase
-	podInfo.Status = k8swatch.PodStatusToString(*pod)
 	podInfo.StatusMessages = k8swatch.PodStatusErrorMessages(*pod)
 	podInfo.Conditions = pod.Status.Conditions
 
@@ -114,12 +117,15 @@ func matchPodChangeToManifest(state *store.EngineState, action k8swatch.PodChang
 func maybeTrackPod(ms *store.ManifestState, action k8swatch.PodChangeAction) (*store.Pod, bool) {
 	pod := action.Pod
 	podID := k8s.PodIDFromPod(pod)
-	startedAt := pod.CreationTimestamp.Time
-	status := k8swatch.PodStatusToString(*pod)
-	ns := k8s.NamespaceFromPod(pod)
-	hasSynclet := sidecar.PodSpecContainsSynclet(pod.Spec)
 	runtime := ms.GetOrCreateK8sRuntimeState()
 	isCurrentDeploy := runtime.HasOKPodTemplateSpecHash(pod) // is pod from the most recent Tilt deploy?
+
+	// Only attach a new pod to the runtime state if it's from the current deploy;
+	// if it's from an old deploy/an old Tilt run, we don't want to be checking it
+	// for status etc.
+	if !isCurrentDeploy {
+		return runtime.Pods[podID], false
+	}
 
 	// Case 1: We haven't seen pods for this ancestor yet.
 	ancestorUID := action.AncestorUID
@@ -127,22 +133,14 @@ func maybeTrackPod(ms *store.ManifestState, action k8swatch.PodChangeAction) (*s
 	if runtime.PodAncestorUID == "" ||
 		(isAncestorMatch && runtime.PodAncestorUID != ancestorUID) {
 		podInfo := &store.Pod{
-			PodID:      podID,
-			StartedAt:  startedAt,
-			Status:     status,
-			Namespace:  ns,
-			HasSynclet: hasSynclet,
-			SpanID:     runtimelog.SpanIDForPod(podID),
+			PodID: podID,
 		}
-		if isCurrentDeploy {
-			// Only attach a new pod to the runtime state if it's from the current deploy;
-			// if it's from an old deploy/an old Tilt run, we don't want to be checking it
-			// for status etc.
-			runtime.PodAncestorUID = ancestorUID
-			runtime.Pods = make(map[k8s.PodID]*store.Pod)
-			runtime.Pods[podID] = podInfo
-			ms.RuntimeState = runtime
-		}
+
+		runtime.PodAncestorUID = ancestorUID
+		runtime.Pods = make(map[k8s.PodID]*store.Pod)
+		runtime.Pods[podID] = podInfo
+		ms.RuntimeState = runtime
+
 		return podInfo, true
 	}
 
@@ -151,19 +149,11 @@ func maybeTrackPod(ms *store.ManifestState, action k8swatch.PodChangeAction) (*s
 		// CASE 2: We have a set of pods for this ancestor UID, but not this
 		// particular pod -- record it
 		podInfo = &store.Pod{
-			PodID:      podID,
-			StartedAt:  startedAt,
-			Status:     status,
-			Namespace:  ns,
-			HasSynclet: hasSynclet,
-			SpanID:     runtimelog.SpanIDForPod(podID),
+			PodID: podID,
 		}
-		if isCurrentDeploy {
-			// Only attach a new pod to the runtime state if it's from the current deploy;
-			// if it's from an old deploy/an old Tilt run, we don't want to be checking it
-			// for status etc.
-			runtime.Pods[podID] = podInfo
-		}
+
+		runtime.Pods[podID] = podInfo
+
 		return podInfo, true
 	}
 
