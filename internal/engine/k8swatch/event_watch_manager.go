@@ -7,6 +7,7 @@ import (
 
 	"github.com/pkg/errors"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 
 	"github.com/windmilleng/tilt/internal/k8s"
@@ -87,7 +88,7 @@ func (m *EventWatchManager) OnChange(ctx context.Context, st store.RStore) {
 func (m *EventWatchManager) setupWatch(ctx context.Context, st store.RStore, tiltStartTime time.Time) {
 	m.watching = true
 
-	ch, err := m.kClient.WatchEvents(ctx)
+	ch, err := m.kClient.WatchResource(ctx, k8s.EventGVR, labels.Everything())
 	if err != nil {
 		err = errors.Wrap(err, "Error watching k8s events\n")
 		st.Dispatch(store.NewErrorAction(err))

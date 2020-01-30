@@ -98,7 +98,7 @@ func TestK8sClient_WatchPodsError(t *testing.T) {
 	defer tf.TearDown()
 
 	tf.watchErr = newForbiddenError()
-	_, err := tf.kCli.WatchPods(tf.ctx, labels.Everything())
+	_, err := tf.kCli.WatchResource(tf.ctx, PodGVR, labels.Everything())
 	if assert.Error(t, err) {
 		assert.Contains(t, err.Error(), "Forbidden")
 	}
@@ -126,7 +126,7 @@ func TestK8sClient_WatchPodsBlockedByNamespaceRestriction(t *testing.T) {
 	tf.nsRestriction = "sandbox"
 	tf.kCli.configNamespace = ""
 
-	_, err := tf.kCli.WatchPods(tf.ctx, labels.Everything())
+	_, err := tf.kCli.WatchResource(tf.ctx, PodGVR, labels.Everything())
 	if assert.Error(t, err) {
 		assert.Contains(t, err.Error(), "Code: 403")
 	}
@@ -154,7 +154,7 @@ func TestK8sClient_WatchServicesBlockedByNamespaceRestriction(t *testing.T) {
 	tf.nsRestriction = "sandbox"
 	tf.kCli.configNamespace = ""
 
-	_, err := tf.kCli.WatchServices(tf.ctx, labels.Everything())
+	_, err := tf.kCli.WatchResource(tf.ctx, ServiceGVR, labels.Everything())
 	if assert.Error(t, err) {
 		assert.Contains(t, err.Error(), "Code: 403")
 	}
@@ -309,24 +309,24 @@ func (tf *watchTestFixture) TearDown() {
 	tf.cancel()
 }
 
-func (tf *watchTestFixture) watchPods() <-chan *v1.Pod {
-	ch, err := tf.kCli.WatchPods(tf.ctx, labels.Everything())
+func (tf *watchTestFixture) watchPods() <-chan interface{} {
+	ch, err := tf.kCli.WatchResource(tf.ctx, PodGVR, labels.Everything())
 	if err != nil {
 		tf.t.Fatalf("watchPods: %v", err)
 	}
 	return ch
 }
 
-func (tf *watchTestFixture) watchServices() <-chan *v1.Service {
-	ch, err := tf.kCli.WatchServices(tf.ctx, labels.Everything())
+func (tf *watchTestFixture) watchServices() <-chan interface{} {
+	ch, err := tf.kCli.WatchResource(tf.ctx, ServiceGVR, labels.Everything())
 	if err != nil {
 		tf.t.Fatalf("watchServices: %v", err)
 	}
 	return ch
 }
 
-func (tf *watchTestFixture) watchEvents() <-chan *v1.Event {
-	ch, err := tf.kCli.WatchEvents(tf.ctx)
+func (tf *watchTestFixture) watchEvents() <-chan interface{} {
+	ch, err := tf.kCli.WatchResource(tf.ctx, EventGVR, labels.Everything())
 	if err != nil {
 		tf.t.Fatalf("watchEvents: %v", err)
 	}
@@ -427,7 +427,7 @@ func (tf *watchTestFixture) assertEvents(expectedOutput []runtime.Object, ch <-c
 }
 
 func (tf *watchTestFixture) testPodLabels(input labels.Set, expectedLabels labels.Set) {
-	_, err := tf.kCli.WatchPods(tf.ctx, input.AsSelector())
+	_, err := tf.kCli.WatchResource(tf.ctx, PodGVR, input.AsSelector())
 	if !assert.NoError(tf.t, err) {
 		return
 	}
@@ -436,7 +436,7 @@ func (tf *watchTestFixture) testPodLabels(input labels.Set, expectedLabels label
 }
 
 func (tf *watchTestFixture) testServiceLabels(input labels.Set, expectedLabels labels.Set) {
-	_, err := tf.kCli.WatchServices(tf.ctx, input.AsSelector())
+	_, err := tf.kCli.WatchResource(tf.ctx, ServiceGVR, input.AsSelector())
 	if !assert.NoError(tf.t, err) {
 		return
 	}

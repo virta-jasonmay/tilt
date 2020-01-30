@@ -9,6 +9,7 @@ import (
 	"github.com/pkg/errors"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/watch"
 
 	"github.com/windmilleng/tilt/internal/container"
@@ -57,15 +58,7 @@ func (ec *explodingClient) CreatePortForwarder(ctx context.Context, namespace Na
 	return nil, errors.Wrap(ec.err, "could not set up k8s client")
 }
 
-func (ec *explodingClient) WatchPods(ctx context.Context, lps labels.Selector) (<-chan *v1.Pod, error) {
-	return nil, errors.Wrap(ec.err, "could not set up k8s client")
-}
-
-func (ec *explodingClient) WatchServices(ctx context.Context, lps labels.Selector) (<-chan *v1.Service, error) {
-	return nil, errors.Wrap(ec.err, "could not set up k8s client")
-}
-
-func (ec *explodingClient) WatchEvents(ctx context.Context) (<-chan *v1.Event, error) {
+func (ec *explodingClient) WatchResource(ctx context.Context, gvr schema.GroupVersionResource, lps labels.Selector) (<-chan interface{}, error) {
 	return nil, errors.Wrap(ec.err, "could not set up k8s client")
 }
 

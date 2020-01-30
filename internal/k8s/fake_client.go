@@ -3,6 +3,7 @@ package k8s
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"sync"
@@ -14,6 +15,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/watch"
 
 	"github.com/windmilleng/tilt/internal/container"
@@ -54,7 +56,7 @@ type FakeK8sClient struct {
 	serviceWatcherMu sync.Mutex
 	serviceWatches   []fakeServiceWatch
 
-	eventsCh       chan *v1.Event
+	eventsCh       chan interface{}
 	EventsWatchErr error
 
 	UpsertError      error
@@ -80,12 +82,12 @@ type ExecCall struct {
 
 type fakeServiceWatch struct {
 	ls labels.Selector
-	ch chan *v1.Service
+	ch chan interface{}
 }
 
 type fakePodWatch struct {
 	ls labels.Selector
-	ch chan *v1.Pod
+	ch chan interface{}
 }
 
 func (c *FakeK8sClient) EmitService(ls labels.Selector, s *v1.Service) {
@@ -96,38 +98,6 @@ func (c *FakeK8sClient) EmitService(ls labels.Selector, s *v1.Service) {
 			w.ch <- s
 		}
 	}
-}
-
-func (c *FakeK8sClient) WatchServices(ctx context.Context, ls labels.Selector) (<-chan *v1.Service, error) {
-	c.serviceWatcherMu.Lock()
-	ch := make(chan *v1.Service, 20)
-	c.serviceWatches = append(c.serviceWatches, fakeServiceWatch{ls, ch})
-	c.serviceWatcherMu.Unlock()
-
-	go func() {
-		// when ctx is canceled, remove the label selector from the list of watched label selectors
-		<-ctx.Done()
-		c.serviceWatcherMu.Lock()
-		var newWatches []fakeServiceWatch
-		for _, e := range c.serviceWatches {
-			if !SelectorEqual(e.ls, ls) {
-				newWatches = append(newWatches, e)
-			}
-		}
-		c.serviceWatches = newWatches
-		c.serviceWatcherMu.Unlock()
-	}()
-	return ch, nil
-}
-
-func (c *FakeK8sClient) WatchEvents(ctx context.Context) (<-chan *v1.Event, error) {
-	if c.EventsWatchErr != nil {
-		err := c.EventsWatchErr
-		c.EventsWatchErr = nil
-		return nil, err
-	}
-
-	return c.eventsCh, nil
 }
 
 func (c *FakeK8sClient) EmitEvent(ctx context.Context, evt *v1.Event) {
@@ -154,9 +124,54 @@ func (c *FakeK8sClient) EmitPod(ls labels.Selector, p *v1.Pod) {
 	}
 }
 
-func (c *FakeK8sClient) WatchPods(ctx context.Context, ls labels.Selector) (<-chan *v1.Pod, error) {
+func (c *FakeK8sClient) WatchResource(ctx context.Context, gvr schema.GroupVersionResource, ls labels.Selector) (<-chan interface{}, error) {
+	if gvr.Resource == "pods" {
+		return c.watchPods(ctx, ls)
+	}
+	if gvr.Resource == "services" {
+		return c.watchServices(ctx, ls)
+	}
+	if gvr.Resource == "events" {
+		return c.watchEvents(ctx, ls)
+	}
+	return nil, fmt.Errorf("Watcher setup failed")
+}
+
+func (c *FakeK8sClient) watchServices(ctx context.Context, ls labels.Selector) (<-chan interface{}, error) {
+	c.serviceWatcherMu.Lock()
+	ch := make(chan interface{}, 20)
+	c.serviceWatches = append(c.serviceWatches, fakeServiceWatch{ls, ch})
+	c.serviceWatcherMu.Unlock()
+
+	go func() {
+		// when ctx is canceled, remove the label selector from the list of watched label selectors
+		<-ctx.Done()
+		c.serviceWatcherMu.Lock()
+		var newWatches []fakeServiceWatch
+		for _, e := range c.serviceWatches {
+			if !SelectorEqual(e.ls, ls) {
+				newWatches = append(newWatches, e)
+			}
+		}
+		c.serviceWatches = newWatches
+		c.serviceWatcherMu.Unlock()
+	}()
+	return ch, nil
+}
+
+func (c *FakeK8sClient) watchEvents(ctx context.Context, ls labels.Selector) (<-chan interface{}, error) {
+	if c.EventsWatchErr != nil {
+		err := c.EventsWatchErr
+		c.EventsWatchErr = nil
+		return nil, err
+	}
+
+	return c.eventsCh, nil
+}
+
+func (c *FakeK8sClient) watchPods(ctx context.Context, ls labels.Selector) (<-chan interface{}, error) {
 	c.podWatcherMu.Lock()
-	ch := make(chan *v1.Pod, 20)
+	ch := make(chan interface{}, 20)
 	c.podWatches = append(c.podWatches, fakePodWatch{ls, ch})
 	c.podWatcherMu.Unlock()
 
@@ -179,7 +194,7 @@ func (c *FakeK8sClient) WatchPods(ctx context.Context, ls labels.Selector) (<-ch
 func NewFakeK8sClient() *FakeK8sClient {
 	return &FakeK8sClient{
 		PodLogsByPodAndContainer: make(map[PodAndCName]BufferCloser),
-		eventsCh:                 make(chan *v1.Event, 10),
+		eventsCh:                 make(chan interface{}, 10),
 	}
 }
 

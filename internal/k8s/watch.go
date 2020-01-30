@@ -20,6 +20,10 @@ import (
 	"github.com/windmilleng/tilt/pkg/logger"
 )
 
+var PodGVR = v1.SchemeGroupVersion.WithResource("pods")
+var ServiceGVR = v1.SchemeGroupVersion.WithResource("services")
+var EventGVR = v1.SchemeGroupVersion.WithResource("events")
+
 type watcherFactory func(namespace string) watcher
 type watcher interface {
 	Watch(options metav1.ListOptions) (watch.Interface, error)
@@ -96,112 +100,54 @@ func (kCli K8sClient) makeInformer(
 	return resFactory.Informer(), nil
 }
 
-func (kCli K8sClient) WatchEvents(ctx context.Context) (<-chan *v1.Event, error) {
-	gvr := v1.SchemeGroupVersion.WithResource("events")
-	informer, err := kCli.makeInformer(ctx, gvr, labels.Everything())
-	if err != nil {
-		return nil, errors.Wrap(err, "WatchEvents")
-	}
-
-	ch := make(chan *v1.Event)
-	informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc: func(obj interface{}) {
-			mObj, ok := obj.(*v1.Event)
-			if ok {
-				ch <- mObj
-			}
-		},
-		UpdateFunc: func(oldObj interface{}, newObj interface{}) {
-			mObj, ok := newObj.(*v1.Event)
-			if ok {
-				oldObj, ok := oldObj.(*v1.Event)
-				// the informer regularly gives us updates for events where cmp.Equal(oldObj, newObj) returns true.
-				// we have not investigated why it does this, but these updates seem to always be spurious and
-				// uninteresting.
-				// we could check cmp.Equal here, but really, `Count` is probably the only reason we even care about
-				// updates at all.
-				if !ok || oldObj.Count < mObj.Count {
-					ch <- mObj
-				}
-			}
-		},
-	})
-
-	go runInformer(ctx, "events", informer)
-
-	return ch, nil
-}
-
-func (kCli K8sClient) WatchPods(ctx context.Context, ls labels.Selector) (<-chan *v1.Pod, error) {
-	gvr := v1.SchemeGroupVersion.WithResource("pods")
+func (kCli K8sClient) WatchResource(ctx context.Context, gvr schema.GroupVersionResource, ls labels.Selector) (<-chan interface{}, error) {
 	informer, err := kCli.makeInformer(ctx, gvr, ls)
 	if err != nil {
-		return nil, errors.Wrap(err, "WatchPods")
+		return nil, errors.Wrap(err, "WatchResource")
 	}
 
-	ch := make(chan *v1.Pod)
+	ch := make(chan interface{})
 	informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
-			mObj, ok := obj.(*v1.Pod)
+			pod, ok := obj.(*v1.Pod)
 			if ok {
-				FixContainerStatusImages(mObj)
-				ch <- mObj
+				FixContainerStatusImages(pod)
 			}
+			ch <- obj
 		},
 		DeleteFunc: func(obj interface{}) {
-			mObj, ok := obj.(*v1.Pod)
+			pod, ok := obj.(*v1.Pod)
 			if ok {
-				FixContainerStatusImages(mObj)
-				ch <- mObj
+				FixContainerStatusImages(pod)
 			}
+			ch <- obj
 		},
 		UpdateFunc: func(oldObj interface{}, newObj interface{}) {
-			oldPod, ok := oldObj.(*v1.Pod)
-			if !ok {
-				return
-			}
-
 			newPod, ok := newObj.(*v1.Pod)
-			if !ok {
-				return
-			}
-
-			if oldPod != newPod {
+			if ok {
 				FixContainerStatusImages(newPod)
-				ch <- newPod
 			}
+
+			newEvent, ok := newObj.(*v1.Event)
+			if ok {
+				oldEvent, ok := oldObj.(*v1.Event)
+				// OnUpdate is regularly called when a re-list happens.
+				//
+				// For events, this ends up spamming us with tons of events even if nothing has changed.
+				// To improve throughput a bit, we filter out events where count hasn't changed.
+				//
+				// For more info on this behavior, see:
+				// https://godoc.org/k8s.io/client-go/tools/cache#ResourceEventHandler
+				if ok && oldEvent.Count >= newEvent.Count {
+					return
+				}
+			}
+
+			ch <- newObj
 		},
 	})
 
-	go runInformer(ctx, "pods", informer)
-
-	return ch, nil
-}
-
-func (kCli K8sClient) WatchServices(ctx context.Context, ls labels.Selector) (<-chan *v1.Service, error) {
-	gvr := v1.SchemeGroupVersion.WithResource("services")
-	informer, err := kCli.makeInformer(ctx, gvr, ls)
-	if err != nil {
-		return nil, errors.Wrap(err, "WatchServices")
-	}
-
-	ch := make(chan *v1.Service)
-	informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc: func(obj interface{}) {
-			mObj, ok := obj.(*v1.Service)
-			if ok {
-				ch <- mObj
-			}
-		},
-		UpdateFunc: func(oldObj interface{}, newObj interface{}) {
-			newService, ok := newObj.(*v1.Service)
-			if ok {
-				ch <- newService
-			}
-		},
-	})
-
-	go runInformer(ctx, "services", informer)
+	go runInformer(ctx, gvr.Resource, informer)
 
 	return ch, nil
 }
