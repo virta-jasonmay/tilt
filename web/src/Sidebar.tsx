@@ -38,6 +38,9 @@ class SidebarItem {
   constructor(res: Resource) {
     let buildHistory = res.buildHistory || []
     let lastBuild = buildHistory.length > 0 ? buildHistory[0] : null
+    if (lastBuild) {
+      console.log("✨", lastBuild.buildTypes)
+    }
 
     this.name = res.name ?? ""
     this.isTiltfile = !!res.isTiltfile
