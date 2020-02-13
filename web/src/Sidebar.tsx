@@ -38,9 +38,10 @@ class SidebarItem {
   constructor(res: Resource) {
     let buildHistory = res.buildHistory || []
     let lastBuild = buildHistory.length > 0 ? buildHistory[0] : null
-    if (lastBuild) {
-      console.log("✨", lastBuild.buildTypes)
-    }
+
+    // TODO(han): should be able to access res.lastBuild.buildTypes for type of last build,
+    //   and res.targetTypes for list of build types possible for this resource -- e.g. [image, k8s, live_update]
+    //   Godspeed!
 
     this.name = res.name ?? ""
     this.isTiltfile = !!res.isTiltfile
