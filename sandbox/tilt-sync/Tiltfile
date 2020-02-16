@@ -1,0 +1,9 @@
+docker_build(
+    "image-sync-issue",
+    ".",
+    live_update=[
+        sync("content.txt", "/content.txt")
+    ],
+)
+
+k8s_yaml("deployments.yaml", )

@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jasonmay1-deployment
+  labels:
+    app: jasonmay1
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jasonmay1
+  template:
+    metadata:
+      labels:
+        app: jasonmay1
+    spec:
+      containers:
+      - name: image-sync-issue
+        image: image-sync-issue
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jasonmay2-deployment
+  labels:
+    app: jasonmay2
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jasonmay2
+  template:
+    metadata:
+      labels:
+        app: jasonmay2
+    spec:
+      containers:
+      - name: image-sync-issue
+        image: image-sync-issue
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jasonmay3-deployment
+  labels:
+    app: jasonmay3
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jasonmay3
+  template:
+    metadata:
+      labels:
+        app: jasonmay3
+    spec:
+      containers:
+      - name: image-sync-issue
+        image: image-sync-issue
